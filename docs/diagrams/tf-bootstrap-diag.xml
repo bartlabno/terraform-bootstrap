@@ -1,0 +1,69 @@
+<mxfile host="app.diagrams.net" modified="2023-10-27T14:30:00.000Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36" etag="L_P-hYg0_dKjL2wJp9Qv" version="22.0.8" type="device">
+  <diagram id="C5R2v8kI4T-g8x_4aQ_p" name="Page-1">
+    <mxGraphModel dx="1434" dy="782" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" value="Admin / CI/CD Role" style="shape=mxgraph.aws4.role;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="260" width="120" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="Terraform State Bucket&lt;br&gt;(Encrypted with KMS)" style="shape=mxgraph.aws4.s3_bucket;whiteSpace=wrap;html=1;align=center;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="320" y="250" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="AWS KMS Key&lt;br&gt;(Restricted to Bucket)" style="shape=mxgraph.aws4.kms;whiteSpace=wrap;html=1;align=center;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="360" y="40" width="120" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="AWS CloudTrail" style="shape=mxgraph.aws4.cloudtrail;whiteSpace=wrap;html=1;align=center;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="640" y="265" width="120" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="CloudWatch Log Group" style="shape=mxgraph.aws4.cloudwatch_logs;whiteSpace=wrap;html=1;align=center;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="630" y="440" width="140" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="7" value="CloudWatch Alarm" style="shape=mxgraph.aws4.cloudwatch_alarm;whiteSpace=wrap;html=1;align=center;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="400" y="580" width="100" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="8" value="AWS SNS Topic" style="shape=mxgraph.aws4.sns_topic;whiteSpace=wrap;html=1;align=center;fontFamily=Helvetica;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="160" y="585" width="90" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="9" value="Access via IAM / S3 Policy" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="2" target="3">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="200" y="300" as="sourcePoint" />
+            <mxPoint x="280" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="10" value="Uses for Encryption" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=1;exitX=0.5;exitY=0;" edge="1" parent="1" source="3" target="4">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="420" y="220" as="sourcePoint" />
+            <mxPoint x="420" y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="11" value="Data Events (Put, Get, Delete)" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;exitX=1;exitY=0.5;" edge="1" parent="1" source="3" target="5">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="540" y="300" as="sourcePoint" />
+            <mxPoint x="600" y="300" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="12" value="Logs" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=0;exitX=0.5;exitY=1;" edge="1" parent="1" source="5" target="6">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="700" y="360" as="sourcePoint" />
+            <mxPoint x="700" y="420" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="13" value="Metric Filter (Optional)" style="endArrow=classic;html=1;rounded=0;dashed=1;entryX=0.5;entryY=0;exitX=0;exitY=1;" edge="1" parent="1" source="6" target="7">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="580" y="540" as="sourcePoint" />
+            <mxPoint x="500" y="560" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="14" value="Notification (Optional)" style="endArrow=classic;html=1;rounded=0;dashed=1;entryX=1;entryY=0.5;exitX=0;exitX=0.5;" edge="1" parent="1" source="7" target="8">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="630" as="sourcePoint" />
+            <mxPoint x="280" y="630" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+
+
