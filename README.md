@@ -19,7 +19,7 @@ This setup is ideal for teams who need a centralized, secure, and auditable way 
 
 ## Architecture Diagram
 
-![diagram](./docs/diagrams/tf-bootstrap.drawio.png)
+![diagram](./docs/diagrams/tf-bootstrap.drawio.jpg)
 
 
 ## How to Deploy
