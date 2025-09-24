@@ -1,0 +1,278 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Creates a secure S3 bucket for Terraform state with a dedicated KMS key and a
+  least-privilege bucket policy. Also creates an AWS CloudTrail trail to log 
+  all data events and sends logs to CloudWatch for security auditing. 
+  Optionally configures a CloudWatch Alarm to send notifications to SNS on state file changes.
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: The name of the S3 bucket to create for Terraform state. Must be globally unique.
+    AllowedPattern: '^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]$'
+    ConstraintDescription: 'S3 bucket name can contain only lowercase letters, numbers, and hyphens.'
+  
+  CloudTrailLogBucketName:
+    Type: String
+    Description: A globally unique name for the S3 bucket to store CloudTrail logs.
+    AllowedPattern: '^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]$'
+    ConstraintDescription: 'S3 bucket name can contain only lowercase letters, numbers, and hyphens.'
+  
+  LogRetentionInDays:
+    Type: Number
+    Description: The number of days to retain CloudTrail logs in CloudWatch Logs.
+    Default: 90
+    AllowedValues: [1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 2192, 2557, 2922, 3288, 3653]
+
+  AllowedAdminRoleArns:
+    Type: CommaDelimitedList
+    Description: A comma-separated list of IAM Role ARNs allowed to read/write Terraform state (e.g., arn:aws:iam::ACCOUNT_ID:role/Admin,arn:aws:iam::ACCOUNT_ID:role/GitHubActionsRole).
+
+  EnableNotifications:
+    Type: String
+    Description: Set to 'true' to enable CloudWatch alarms and SNS notifications for state file changes.
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: 'false'
+
+  NotificationSnsTopicArn:
+    Type: String
+    Description: "(Optional) The ARN of the SNS topic to send alarm notifications to. Required if EnableNotifications is 'true'."
+    Default: ''
+
+Conditions:
+  ShouldCreateNotificationResources: !Equals [!Ref EnableNotifications, 'true']
+
+Rules:
+  SnsTopicArnRule:
+    RuleCondition: !Equals [!Ref EnableNotifications, 'true']
+    Assertions:
+      - Assert: !Not [!Equals [!Ref NotificationSnsTopicArn, '']]
+        AssertDescription: "If EnableNotifications is set to 'true', you must provide a value for NotificationSnsTopicArn."
+
+Resources:
+  # KMS Key for encrypting the Terraform state S3 Bucket
+  TerraformStateBucketKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for encrypting the Terraform state S3 bucket
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'Allow administration of the key'
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: 'Allow use of the key for allowed roles'
+            Effect: Allow
+            Principal:
+              AWS: !Ref AllowedAdminRoleArns
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+            Condition:
+              StringLike:
+                'kms:EncryptionContext:aws:s3:arn':
+                  - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+                  - !Sub 'arn:aws:s3:::${S3BucketName}'
+
+  # S3 Bucket for storing the terraform.tfstate file
+  TerraformStateBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !GetAtt TerraformStateBucketKMSKey.Arn
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: 'Name'
+          Value: !Ref S3BucketName
+        - Key: 'Purpose'
+          Value: 'Terraform State Storage'
+
+  # Bucket policy to restrict access to specific roles
+  TerraformStateBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TerraformStateBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowStateAccessToSpecificRoles'
+            Effect: Allow
+            Principal:
+              AWS: !Ref AllowedAdminRoleArns
+            Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:DeleteObject'
+            Resource: !Sub '${TerraformStateBucket.Arn}/*'
+          - Sid: 'AllowListBucketToSpecificRoles'
+            Effect: Allow
+            Principal:
+              AWS: !Ref AllowedAdminRoleArns
+            Action: 's3:ListBucket'
+            Resource: !GetAtt TerraformStateBucket.Arn
+
+  # S3 bucket to store logs from CloudTrail
+  CloudTrailLogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref CloudTrailLogBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: 'Name'
+          Value: !Ref CloudTrailLogBucketName
+        - Key: 'Purpose'
+          Value: 'CloudTrail Log Storage'
+
+  # S3 Bucket Policy to allow CloudTrail to write logs
+  CloudTrailLogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudTrailLogBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AWSCloudTrailAclCheck20150319'
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action: 's3:GetBucketAcl'
+            Resource: !GetAtt CloudTrailLogBucket.Arn
+          - Sid: 'AWSCloudTrailWrite20150319'
+            Effect: Allow
+            Principal:
+              Service: 'cloudtrail.amazonaws.com'
+            Action: 's3:PutObject'
+            Resource: !Sub '${CloudTrailLogBucket.Arn}/AWSLogs/${AWS::AccountId}/*'
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': 'bucket-owner-full-control'
+
+  # CloudWatch Log Group for CloudTrail
+  CloudWatchLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/cloudtrail/terraform-state-audit-${S3BucketName}'
+      RetentionInDays: !Ref LogRetentionInDays
+
+  # IAM Role for CloudTrail to write to CloudWatch Logs
+  CloudTrailToCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+
+  # IAM Policy for the CloudTrail Role
+  CloudTrailToCloudWatchRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: CloudTrailToCloudWatchLogsPolicy
+      Roles:
+        - !Ref CloudTrailToCloudWatchRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !GetAtt CloudWatchLogGroup.Arn
+
+  # CloudTrail to log data events on the Terraform state bucket
+  TerraformStateBucketCloudTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: CloudTrailToCloudWatchRolePolicy
+    Properties:
+      S3BucketName: !Ref CloudTrailLogBucket
+      IsLogging: true
+      EnableLogFileValidation: true
+      CloudWatchLogsLogGroupArn: !GetAtt CloudWatchLogGroup.Arn
+      CloudWatchLogsRoleArn: !GetAtt CloudTrailToCloudWatchRole.Arn
+      EventSelectors:
+        - DataResources:
+            - Type: 'AWS::S3::Object'
+              Values:
+                - !Sub '${TerraformStateBucket.Arn}/'
+          IncludeManagementEvents: false
+          ReadWriteType: 'All'
+      Tags:
+        - Key: 'Name'
+          Value: 'TerraformStateBucketAuditTrail'
+
+  # --- Optional Notification Resources ---
+  StateChangeMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Condition: ShouldCreateNotificationResources
+    Properties:
+      LogGroupName: !Ref CloudWatchLogGroup
+      FilterPattern: '{ ($.eventName = "PutObject") || ($.eventName = "DeleteObject") || ($.eventName = "DeleteObjects") || ($.errorCode = "AccessDenied") }'
+      MetricTransformations:
+        - MetricValue: '1'
+          MetricNamespace: !Sub 'TerraformState-Audit/${S3BucketName}'
+          MetricName: 'StateFileModificationOrAccessDenied'
+
+  StateChangeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: ShouldCreateNotificationResources
+    Properties:
+      AlarmName: !Sub 'terraform-state-file-modified-or-denied-${S3BucketName}'
+      AlarmDescription: 'Alarm triggers when the Terraform state file is modified, deleted, or access is denied.'
+      Namespace: !Sub 'TerraformState-Audit/${S3BucketName}'
+      MetricName: 'StateFileModificationOrAccessDenied'
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref NotificationSnsTopicArn
+      TreatMissingData: 'notBreaching'
+
+Outputs:
+  S3BucketName:
+    Description: "The name of the S3 bucket for Terraform state"
+    Value: !Ref TerraformStateBucket
+  KMSKeyArn:
+    Description: "ARN of the KMS key used for S3 bucket encryption"
+    Value: !GetAtt TerraformStateBucketKMSKey.Arn
+  CloudTrailLogBucketName:
+    Description: "Name of the S3 bucket holding the CloudTrail logs"
+    Value: !Ref CloudTrailLogBucket
+  CloudWatchLogGroupName:
+    Description: "Name of the CloudWatch Log Group for CloudTrail logs"
+    Value: !Ref CloudWatchLogGroup
+  AlarmName:
+    Condition: ShouldCreateNotificationResources
+    Description: "The name of the CloudWatch Alarm created for state file monitoring."
+    Value: !Ref StateChangeAlarm
+
+
